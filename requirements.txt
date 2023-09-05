@@ -1,10 +1,7 @@
 # requirements.txt
 
 # GUI Framework (Tkinter)
-tk
-
-# File Handling
-os
+customtkinter
 
 # Application permissions
 pyuac
@@ -12,5 +9,9 @@ pyuac
 # Cryptography (for file encryption/decryption)
 cryptography
 
-# Antivirus-related libraries 
+# Antivirus-related libraries
 pyclamd
+pywin32
+
+#Typography
+Pillow
