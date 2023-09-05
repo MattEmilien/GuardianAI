@@ -53,17 +53,17 @@ To get started with GuardianAI, follow these simple steps:
 
 ## File Structure
 
-guardian.py: 🦠 Main entry point of your guardian application.
-gui/: 🖥️ GUI-related files.
-scanning/: 🧐 Modules for file scanning, real-time monitoring, heuristic analysis, and the signature database.
-quarantine/: 📦 Manages quarantined files and contains a directory for quarantined files.
-scheduler/: 🕒 Handles scheduled scans and contains a directory for scheduled tasks.
-logs/: 📋 Stores log files for the antivirus software.
-tests/: 🧪 Unit tests and test data for testing antivirus functionality.
-config/: ⚙️ Configuration settings stored in JSON or another format.
-data/: 📂 Data files for testing, such as malware samples.
-utils/: 🛠️ Utility modules for common functions like file operations and notifications.
-requirements.txt: 📦 Lists project dependencies for easy installation.
+- guardian.py: 🦠 Main entry point of your guardian application.
+- gui/: 🖥️ GUI-related files.
+- scanning/: 🧐 Modules for file scanning, real-time monitoring, heuristic analysis, and the signature database.
+- quarantine/: 📦 Manages quarantined files and contains a directory for quarantined files.
+- scheduler/: 🕒 Handles scheduled scans and contains a directory for scheduled tasks.
+- logs/: 📋 Stores log files for the antivirus software.
+- tests/: 🧪 Unit tests and test data for testing antivirus functionality.
+- config/: ⚙️ Configuration settings stored in JSON or another format.
+- data/: 📂 Data files for testing, such as malware samples.
+- utils/: 🛠️ Utility modules for common functions like file operations and notifications.
+- requirements.txt: 📦 Lists project dependencies for easy installation.
 
 
 ## Recent Commits 📅
