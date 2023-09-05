@@ -1,0 +1,16 @@
+# requirements.txt
+
+# GUI Framework (Tkinter)
+tk
+
+# File Handling
+os
+
+# Application permissions
+pyuac
+
+# Cryptography (for file encryption/decryption)
+cryptography
+
+# Antivirus-related libraries 
+pyclamd
