@@ -1,112 +1,120 @@
-import tkinter as tk
-import customtkinter as ctk
+import customtkinter
+import os
+from PIL import Image
+import importlib
+import gui.views.home as home
 
-ctk.set_appearance_mode("System")
-ctk.set_default_color_theme("blue")
-
-
-class AntivirusApp(ctk.CTk):
+class Main_window(customtkinter.CTk):
     def __init__(self):
         super().__init__()
+
         self.title("Guardian AI - Antivirus")
         self.geometry("1100x580")
 
-        self.create_ui()
-
-    def create_ui(self):
-        self.configure_grid()
-        self.create_main_frame()
-        self.create_sidebar()
-        self.create_quarantined_items()
-        self.center_main_frame()
-
-    def configure_grid(self):
-        self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-    def create_main_frame(self):
-        self.main_frame = ctk.CTkFrame(self)
-        self.main_frame.grid(row=0, column=0, sticky="nsew")
+        self.logo_image = customtkinter.CTkImage(
+            Image.open("assets/guardian.png"), size=(26, 26))
+        self.large_test_image = customtkinter.CTkImage(
+            Image.open("assets/large_test_image.png"), size=(500, 150))
 
-    def create_sidebar(self):
-        sidebar_frame = ctk.CTkFrame(self.main_frame, width=140)
-        sidebar_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
-        sidebar_frame.grid_rowconfigure(2, weight=1)
+        views = [
+            {"name": "Home", "icon_path": "assets/home.png"},
+            {"name": "Update", "icon_path": "assets/update.png"},
+            {"name": "File Scan", "icon_path": "assets/scan.png"},
+            {"name": "Settings", "icon_path": "assets/settings.png"},
+            {"name": "Support", "icon_path": "assets/support.png"}
+        ]
 
-        ctk.CTkLabel(sidebar_frame, text="Guardian AI - Antivirus",
-                     font=ctk.CTkFont(size=20, weight="bold")).grid(row=0, column=0, padx=20, pady=(20, 10))
+        self.icons = {}
+        self.ui_scaling_selector = None
+        self.current_view = None
 
-        scan_button = ctk.CTkButton(
-            sidebar_frame, text="Scan", command=self.scan)
-        scan_button.grid(row=1, column=0, padx=20, pady=10)
-        update_button = ctk.CTkButton(
-            sidebar_frame, text="Update Definitions", command=self.update_definitions)
-        update_button.grid(row=2, column=0, padx=20, pady=10)
+        for view in views:
+            icon_path = view["icon_path"]
+            icon_image = Image.open(icon_path)
+            self.icons[view["name"]] = customtkinter.CTkImage(icon_image)
 
-        appearance_label = ctk.CTkLabel(
-            sidebar_frame, text="Appearance Mode:", anchor="w")
-        appearance_label.grid(row=5, column=0, padx=20, pady=(10, 0))
+        self.navigation_frame = customtkinter.CTkFrame(self, corner_radius=0)
+        self.navigation_frame.grid(row=0, column=0, sticky="nsew")
 
-        appearance_optionmenu = ctk.CTkOptionMenu(sidebar_frame, values=["Light", "Dark", "System"],
-                                                  command=self.change_appearance_mode_event)
-        appearance_optionmenu.grid(row=6, column=0, padx=20, pady=(10, 10))
+        self.navigation_frame.grid_rowconfigure(0, weight=1)
+        for i in range(len(views) + 1):
+            self.navigation_frame.grid_rowconfigure(i + 1, weight=1)
 
-        scaling_label = ctk.CTkLabel(
-            sidebar_frame, text="UI Scaling:", anchor="w")
-        scaling_label.grid(row=7, column=0, padx=20, pady=(10, 0))
+        self.navigation_frame_label = customtkinter.CTkLabel(
+            self.navigation_frame, text="  Guardian AI", image=self.logo_image,
+            compound="left", font=customtkinter.CTkFont(size=15, weight="bold"))
+        self.navigation_frame_label.grid(row=0, column=0, padx=20, pady=15)
 
-        scaling_optionmenu = ctk.CTkOptionMenu(sidebar_frame, values=["80%", "90%", "100%", "110%", "120%"],
-                                               command=self.change_scaling_event)
-        scaling_optionmenu.grid(row=8, column=0, padx=20, pady=(10, 20))
+        self.buttons = []
 
-        self.scan_button = scan_button
-        self.scan_progress = None
+        for i, view in enumerate(views):
+            button = customtkinter.CTkButton(
+                self.navigation_frame, corner_radius=0, height=40, border_spacing=10, text=view["name"],
+                fg_color="transparent", text_color=("gray10", "gray90"), hover_color=("gray70", "gray70"),
+                image=self.icons[view["name"]], anchor="w", command=lambda v=view: self.button_event(v["name"]))
+            button.grid(row=i + 1, column=0, sticky="ew")
+            self.buttons.append(button)
 
-    def create_quarantined_items(self):
-        items_frame = ctk.CTkScrollableFrame(
-            self.main_frame, label_text="Quarantined Items")
-        items_frame.grid(row=0, column=1, padx=(
-            20, 0), pady=(20, 0), sticky="nsew")
+        self.home_frame = customtkinter.CTkFrame(
+            self, corner_radius=0, fg_color="transparent")
+        self.home_frame.grid_columnconfigure(0, weight=1)
 
-        items_frame.grid_rowconfigure(0, weight=1)
-        items_frame.grid_columnconfigure(0, weight=1)
+        self.home_frame_large_image_label = customtkinter.CTkLabel(
+            self.home_frame, text="", image=self.large_test_image)
+        self.home_frame_large_image_label.grid(
+            row=0, column=0, padx=20, pady=10)
 
-        # Simulate adding quarantined items (Replacing after project structure changes)
-        for i in range(10):
-            ctk.CTkSwitch(master=items_frame, text=f"Item {i}").grid(
-                row=i, column=0, padx=10, pady=(0, 20))
+        for i in range(1, 5):
+            button = customtkinter.CTkButton(
+                self.home_frame, text="", image=self.icons["Home"])
+            button.grid(row=i, column=0, padx=20, pady=10)
 
-    def center_main_frame(self):
-        self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.grid(row=0, column=1, sticky="nsew")
+        self.select_frame_by_name("Home")
 
-    def scan(self):
-        self.scan_button.configure(state="disabled", text="Scanning...")
-        self.scan_progress = ctk.CTkProgressBar(self.main_frame)
-        self.scan_progress.grid(row=1, column=0, padx=20,
-                                pady=(20, 0), sticky="nsew")
-        self.scan_progress.start()
-        self.after(3000, self.stop_scan)  # Add Scanning callback func here!
+    def button_event(self, name):
+        self.select_frame_by_name(name)
 
-    def stop_scan(self):
-        if self.scan_progress:
-            self.scan_progress.stop()
-            self.scan_progress.destroy()
-            self.scan_progress = None
+    def select_frame_by_name(self, name):
+        for button in self.buttons:
+            if button.cget("text") == name:
+                button.configure(fg_color=("gray75", "gray25"))
+            else:
+                button.configure(fg_color="transparent")
 
-        self.scan_button.configure(state="normal", text="Scan")
+        if self.current_view:
+            self.current_view.grid_forget()
+        if name == "Home":
+            # Create an instance of Home view
+            self.current_view = home.Home(self.home_frame)
+            # Grid the Home view
+            self.current_view.grid(
+                row=1, column=0, padx=20, pady=10, sticky="nsew")
+        elif name == "Update":
+            try:
+                module = importlib.import_module(f"gui.views.update")
+                view_class = getattr(module, "Update")
+                self.current_view = view_class(self.home_frame)
+                self.current_view.grid(
+                    row=6, column=0, padx=20, pady=10, sticky="s")
+            except (ImportError, AttributeError):
+                self.current_view = None
+        elif name == "Settings":
+            # Create the UI scaling selector only for the Settings view
+            self.ui_scaling_selector = customtkinter.CTkOptionMenu(
+                self.navigation_frame, values=["Light", "Dark", "System"],
+                command=self.change_appearance_mode_event)
+            self.ui_scaling_selector.grid(
+                row=len(self.buttons) + 2, column=0, padx=20, pady=10, sticky="s")
+            self.current_view = None
 
-    def update_definitions(self):
-        pass  # Updating this later :)
-
-    def change_appearance_mode_event(self, new_appearance_mode: str):
-        ctk.set_appearance_mode(new_appearance_mode)
-
-    def change_scaling_event(self, new_scaling: str):
-        new_scaling_float = int(new_scaling.replace("%", "")) / 100
-        ctk.set_widget_scaling(new_scaling_float)
+    def change_appearance_mode_event(self, new_appearance_mode):
+        customtkinter.set_appearance_mode(new_appearance_mode)
 
 
 if __name__ == "__main__":
-    app = AntivirusApp()
+    app = Main_window()
     app.mainloop()

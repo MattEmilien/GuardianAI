@@ -5,6 +5,7 @@ customtkinter
 
 # Application permissions
 pyuac
+requests
 
 # Cryptography (for file encryption/decryption)
 cryptography
@@ -15,3 +16,4 @@ pywin32
 
 #Typography
 Pillow
+googlefonts-installer
