@@ -14,6 +14,7 @@ def main():
     app.mainloop()
     warnings.filterwarnings("ignore", category=UserWarning)
 
+
 def run_as_admin():
     import ctypes
 
