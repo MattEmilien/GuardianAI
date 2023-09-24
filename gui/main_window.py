@@ -12,7 +12,7 @@ class Main_window(CTk):
         self.title("Guardian AI - Antivirus")
         self.geometry("1100x580")
 
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)g
         self.grid_columnconfigure(1, weight=1)
 
         self.logo_image = CTkImage(
