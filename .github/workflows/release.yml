@@ -1,0 +1,273 @@
+name: Automated SemVer Release & Changelog
+
+# Manual release: quality gates -> next SemVer -> CHANGELOG.md -> tag -> GitHub Release.
+# Optionally attaches a Windows .exe built with PyInstaller.
+#
+# Safety notes:
+# - Workflow inputs are only passed through `env:` and read as variables,
+#   never written as ${{ }} inside `run:` scripts (script injection, CWE-94).
+# - No third-party marketplace actions: versioning and changelog are done by
+#   .github/scripts/release_prepare.py (stdlib only) and releases by `gh`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_bump:
+        description: "Version bump"
+        type: choice
+        default: patch
+        options: [patch, minor, major, prerelease, custom]
+      custom_version:
+        description: "Exact version without 'v' (only when release_bump is custom), e.g. 0.1.0"
+        type: string
+        default: ""
+      prerelease:
+        description: "Mark the GitHub Release as a pre-release"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Preview version and changelog only; push nothing"
+        type: boolean
+        default: false
+      release_files:
+        description: "Files to attach: none, or a Windows .exe built with PyInstaller"
+        type: choice
+        default: none
+        options: [none, windows_exe]
+      allow_empty_release:
+        description: "Allow a release with no new commits since the last tag"
+        type: boolean
+        default: false
+
+# A second run waits instead of cancelling a half-pushed commit/tag.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_NAME: GuardianAI
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  prepare-and-tag-release:
+    name: Prepare and tag release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.publish.outputs.released }}
+      tag: ${{ steps.semver.outputs.next_tag }}
+    steps:
+      - name: Check the run is on a branch
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "branch" ]; then
+            echo "::error title=Release blocked::Run this workflow from a branch, not a tag."
+            exit 1
+          fi
+
+      - name: Checkout (full history and tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # requirements.txt includes Windows-only packages (pywin32, pyuac), so the
+      # Linux gates install only the tools they need.
+      - name: Install gate tools
+        run: python -m pip install --upgrade pip ruff pytest
+
+      - name: "Gate: lint"
+        id: gate_lint
+        # Fatal errors only: syntax errors and undefined names.
+        run: ruff check --select E9,F63,F7,F82 --output-format github .
+
+      - name: "Gate: test"
+        id: gate_test
+        run: |
+          set +e
+          python -m pytest -q tests
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            echo "::notice title=No tests collected::pytest found no tests; continuing."
+            exit 0
+          fi
+          exit "$code"
+
+      - name: "Gate: build"
+        id: gate_build
+        # Byte-compile every module, as the packaged app would.
+        run: python -m compileall -q -x '(^|/)(\.git|\.venv|venv)(/|$)' .
+
+      - name: Compute version, sync files, write changelog
+        id: semver
+        env:
+          RELEASE_BUMP: ${{ inputs.release_bump }}
+          CUSTOM_VERSION: ${{ inputs.custom_version }}
+          ALLOW_EMPTY_RELEASE: ${{ inputs.allow_empty_release }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          NOTES_FILE: ${{ runner.temp }}/release_notes.md
+        run: python .github/scripts/release_prepare.py
+
+      - name: Add file note to release notes
+        env:
+          RELEASE_FILES: ${{ inputs.release_files }}
+          NOTES_FILE: ${{ runner.temp }}/release_notes.md
+        run: |
+          {
+            echo ""
+            if [ "$RELEASE_FILES" = "none" ]; then
+              echo "_No files attached. Use the source code archives below._"
+            else
+              echo "_The Windows build (.exe) is attached below once the build job finishes._"
+            fi
+          } >> "$NOTES_FILE"
+
+      - name: Dry run preview
+        if: ${{ inputs.dry_run }}
+        env:
+          NEXT_TAG: ${{ steps.semver.outputs.next_tag }}
+          PREV_TAG: ${{ steps.semver.outputs.prev_tag }}
+          CHANGED_FILES: ${{ steps.semver.outputs.changed_files }}
+          NOTES_FILE: ${{ runner.temp }}/release_notes.md
+        run: |
+          {
+            echo "## Dry run: ${PRODUCT_NAME} ${NEXT_TAG}"
+            echo ""
+            echo "| | |"
+            echo "| :--- | :--- |"
+            echo "| Previous tag | \`${PREV_TAG:-none}\` |"
+            echo "| Next tag | \`${NEXT_TAG}\` |"
+            echo "| Files to commit | \`${CHANGED_FILES}\` |"
+            echo ""
+            echo "Nothing was pushed. Re-run with \`dry_run: false\` to release."
+            echo ""
+            echo "### Release notes"
+            echo ""
+            cat "$NOTES_FILE"
+            echo ""
+            echo "### Changes to files"
+            echo ""
+            echo '```diff'
+            git diff
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit, tag, push and create the GitHub Release
+        id: publish
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_TAG: ${{ steps.semver.outputs.next_tag }}
+          CHANGED_FILES: ${{ steps.semver.outputs.changed_files }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+          NOTES_FILE: ${{ runner.temp }}/release_notes.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # CHANGED_FILES is produced by our own script (fixed file names).
+          # shellcheck disable=SC2086
+          git add -- $CHANGED_FILES
+          git commit -m "chore(release): ${NEXT_TAG} [skip ci]"
+          git tag -a "$NEXT_TAG" -m "${PRODUCT_NAME} ${NEXT_TAG}"
+          git push --atomic origin "HEAD:refs/heads/${GITHUB_REF_NAME}" "refs/tags/${NEXT_TAG}"
+
+          prerelease_flag=()
+          if [ "$IS_PRERELEASE" = "true" ]; then prerelease_flag=(--prerelease); fi
+
+          gh release create "$NEXT_TAG" \
+            --verify-tag \
+            --title "${PRODUCT_NAME} ${NEXT_TAG}" \
+            --notes-file "$NOTES_FILE" \
+            "${prerelease_flag[@]}"
+
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Released ${PRODUCT_NAME} ${NEXT_TAG}"
+            echo ""
+            echo "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${NEXT_TAG}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Explain why the release was blocked
+        if: ${{ failure() }}
+        env:
+          LINT: ${{ steps.gate_lint.outcome }}
+          TEST: ${{ steps.gate_test.outcome }}
+          BUILD: ${{ steps.gate_build.outcome }}
+          SEMVER: ${{ steps.semver.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          row() { echo "| $1 | ${2:-skipped} | $3 |"; }
+          {
+            echo "## Release blocked"
+            echo ""
+            echo "Nothing was tagged unless the publish stage failed after pushing. Fix the failing stage on a branch, merge it, then re-run (dry run first)."
+            echo ""
+            echo "| Stage | Result | Usual fix |"
+            echo "| :--- | :--- | :--- |"
+            row "Lint (\`ruff check --select E9,F63,F7,F82 .\`)" "$LINT" "Fix the syntax errors or undefined names shown in the annotations."
+            row "Test (\`pytest tests\`)" "$TEST" "Run \`pytest tests\` locally and fix the failing tests."
+            row "Build (\`python -m compileall .\`)" "$BUILD" "A module does not compile; see the log."
+            row "Version and changelog" "$SEMVER" "Read the error: invalid \`custom_version\`, tag already exists, or no new commits (merge the PR first or set \`allow_empty_release\`)."
+            row "Commit, tag and publish" "$PUBLISH" "403: enable read and write workflow permissions. GH006: add GitHub Actions to the branch ruleset bypass list."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  attach-windows-exe:
+    name: Attach Windows .exe
+    needs: prepare-and-tag-release
+    if: ${{ needs.prepare-and-tag-release.outputs.released == 'true' && inputs.release_files == 'windows_exe' }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ needs.prepare-and-tag-release.outputs.tag }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-and-tag-release.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          python -m PyInstaller --noconfirm --onefile --windowed \
+            --name "${PRODUCT_NAME}-${TAG}" \
+            --icon assets/guardian.png \
+            --collect-data customtkinter \
+            --hidden-import gui.views.home \
+            --hidden-import gui.views.update \
+            --hidden-import gui.views.file_scan \
+            --add-data "assets;assets" \
+            --add-data "config;config" \
+            guardian.py
+          cd dist
+          sha256sum "${PRODUCT_NAME}-${TAG}.exe" > "${PRODUCT_NAME}-${TAG}.exe.sha256"
+
+      - name: Upload to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" \
+            "dist/${PRODUCT_NAME}-${TAG}.exe" \
+            "dist/${PRODUCT_NAME}-${TAG}.exe.sha256" \
+            --clobber
