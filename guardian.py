@@ -4,6 +4,10 @@ import warnings
 
 from pyuac import main_requires_admin
 
+# In a PyInstaller build, bundled assets live in sys._MEIPASS.
+if getattr(sys, "frozen", False):
+    os.chdir(sys._MEIPASS)
+
 from gui.main_window import Main_window
 
 
